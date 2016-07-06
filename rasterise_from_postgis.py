@@ -5,7 +5,7 @@ from subprocess import Popen
 
 ###################################### Run-specific configuration ###############################################
 # where to write to
-output_dir = "species_raster_ccit/"
+output_dir = "/home/lucy_data_to_organise/species_raster_ccit"
 # this is the field that is meaningful to you to name the raster - it need not be unique within the table.
 unique_id_field = 'id_no'
 # clause for filtering the results (leave blank if none is needed
@@ -54,7 +54,7 @@ try:
     myList = cur.fetchall()
 
     # Create a command for a blank raster
-    blankfile_name = output_dir + 'blank.tif'
+    blankfile_name = os.path.join(output_dir,'blank.tif')
 
     # create a base binary raster going to the edges of required region, 30 arc-second resolution
     gdal_command = 'gdal_rasterize -co NBITS=1 -co COMPRESS=%s -ot Byte -burn 0 -a_srs %s -tr %s %s -te %d %d %d %d PG:\"%s\" -sql \"SELECT ST_SetSRID(ST_MakePolygon(ST_GeomFromText(\'LINESTRING(%d %d,%d %d, %d %d, %d %d, %d %d)\')), %d);\" %s' % (compressionStrategy, theProj, str(pixelRes), str(pixelRes), llx, lly, urx, ury, db_connection_string, llx,lly,llx,ury,urx,ury,urx,lly,llx,lly,epsg, blankfile_name)
@@ -70,7 +70,7 @@ try:
     for theID, xmin, ymin, xmax, ymax in myList:
         print theID
     ##
-        outputfile_name = output_dir + ('%d.tif' % theID)
+        outputfile_name = os.path.join(output_dir, '%d.tif' % theID)
         if (os.path.isfile(outputfile_name)):
             # don't need to do anything...
             print('.')
