@@ -15,23 +15,25 @@ USE_WKB = True
 ##tableName = "hadoop.will_grid_gridded_wdpa"
 ##testField = 'wdpaid'
 
-selectFields = 'wdpaid, wdpa_pid, iucn_cat, iso3, marine, type, ST_AsBinary(geom) AS geom'
-outputfile = "wdpa_jun_2016"
-tableName = "pp2016.v_final_wdpa_relevant_jun2016"
-testField = 'wdpaid'
-whereClause = ""
+# NB PA names cause a problem on writing: UTF8. Make sure to fix if necessary
+##selectFields = 'wdpaid, wdpa_pid, iucn_cat, iso3, marine, rep_area, type, ST_AsBinary(geom) AS geom'
+##outputfile = "wdpa_jun_2016"
+##tableName = "pp2016.mv_final_wdpa_relevant_jun2016"
+##testField = 'wdpaid'
+##whereClause = ""
 
 ##selectFields = 'id, ST_AsBinary(geom) AS geom'
 ##outputfile = "vgrid_2015"
+##selectFields = 'id as cell_id, ST_AsBinary(geom) AS geom'
 ##tableName = "hgrid.h_grid2"
 ##whereClause = " WHERE is_leaf IS TRUE"
 ##testField = 'id'
 
-##selectFields = 'id_no, presence, origin, seasonal, ST_AsBinary(make_valid_geom) AS geom'
-##outputfile = "species_feb_2014"
-##tableName = "public.lb_experiment_iucn_rl_species_2014_2_no_sens"
-##whereClause = ""
-##testField = 'id_no'
+selectFields = 'id_no, presence, origin, seasonal, ST_AsBinary(geom) AS geom'
+outputfile = "species_feb_2014"
+tableName = "pp2016.temp_feb2014_species_dumped_validated_collected"
+whereClause = ""
+testField = 'id_no'
 
 ### For writing out a JSON schema
 ##selectFields = "id_no,binomial,rl_update,scientific_name,comm_name,kingdom,phylum,class,order_,family,genus_name,species_name,category,biome_mar,biome_fw,biome_terr,ST_AsText(make_valid_geom) as geometry"

@@ -5,11 +5,12 @@ from subprocess import Popen
 
 ###################################### Run-specific configuration ###############################################
 # where to write to
-output_dir = "/home/lucy_data_to_organise/species_raster_ccit"
+output_dir = "/home/lucy_data_to_organise/python/species_raster_ccit"
 # this is the field that is meaningful to you to name the raster - it need not be unique within the table.
 unique_id_field = 'id_no'
 # clause for filtering the results (leave blank if none is needed
 # for species Red List data, only certain types of occupancy are important in defining a usable range
+# whereClause = " WHERE presence IN (1,2) AND origin IN (1,2) AND seasonal IN (1,2,3)"
 whereClause = " WHERE presence IN (1,2) AND origin IN (1,2) AND seasonal IN (1,2,3)"
 # clause for grouping the records into one map. Leave blank if you want one map per database row.
 # in this case, we choose one map for each species
@@ -33,6 +34,10 @@ epsg=4326
 theProj = 'EPSG:%d' % epsg
 # Compression technique (e.g., LZW). For binary maps, choose a Huffman approach
 compressionStrategy = 'CCITTRLE'
+# pixel threshold for burning all pixels - i.e., if the extent is less than this on one direction
+pixelThresh = 6
+# should we overwrite existing files?
+overwrite = True
 ###############################################################################################################
 
 try:
@@ -46,7 +51,9 @@ try:
     SELECT foo.%s, ST_XMIN(foo.extent) AS xmin, ST_YMIN(foo.extent) AS ymin, ST_XMAX(foo.extent) AS xmax, ST_YMAX(foo.extent) AS ymax FROM
     (SELECT %s, ST_Extent(%s) as extent FROM %s%s%s) AS foo;
     """ % (unique_id_field, unique_id_field, geometryFieldName, tableName, whereClause, groupByClause)
+    
     # print (strSql)
+
     # execute the query
     cur.execute(strSql)
      
@@ -59,24 +66,30 @@ try:
     # create a base binary raster going to the edges of required region, 30 arc-second resolution
     gdal_command = 'gdal_rasterize -co NBITS=1 -co COMPRESS=%s -ot Byte -burn 0 -a_srs %s -tr %s %s -te %d %d %d %d PG:\"%s\" -sql \"SELECT ST_SetSRID(ST_MakePolygon(ST_GeomFromText(\'LINESTRING(%d %d,%d %d, %d %d, %d %d, %d %d)\')), %d);\" %s' % (compressionStrategy, theProj, str(pixelRes), str(pixelRes), llx, lly, urx, ury, db_connection_string, llx,lly,llx,ury,urx,ury,urx,lly,llx,lly,epsg, blankfile_name)
    
-    proc = Popen(gdal_command, shell=True)
-    proc.wait()
-    if (proc.returncode != 0):
-        print proc.returncode      
+##    proc = Popen(gdal_command, shell=True)
+##    proc.wait()
+##    if (proc.returncode != 0):
+##        print proc.returncode      
 
     ##    #xmin,ymin,xmax,ymax = float(*extent)
     ##    # was trying to cleverly unpack the list here, but it doesn't work
 
     for theID, xmin, ymin, xmax, ymax in myList:
-        print theID
-    ##
+
         outputfile_name = os.path.join(output_dir, '%d.tif' % theID)
-        if (os.path.isfile(outputfile_name)):
-            # don't need to do anything...
-            print('.')
+        
+        if (not os.path.isfile(outputfile_name) or overwrite is True):
             
-        else:
-            print outputfile_name
+            # check the extent of the features - if very small, make sure that all touched pixels get burned
+            # TODO - update this so that it takes into account area and perimeter.
+
+            burnall = False
+            xdim = (xmax-xmin)/pixelRes
+            ydim = (ymax-ymin)/pixelRes
+            if xdim <pixelThresh or ydim <pixelThresh:
+                burnall = True
+                print "for species %d, the extent is %.2f x %.2f - will burn all pixels" % (theID, xdim, ydim)
+                
         ##    # round the coordinates so that the pixels will always snap to an exact grid
             xmin = xmin - (xmin % pixelRes)
             if xmin < llx:
@@ -91,23 +104,27 @@ try:
             if ymax > ury:
                 ymax = ury
 
-            # create a base binary raster going to the edges of the world, 30 arc-second resolution
+            # clip the base raster to the appropriate coordinates
             gdal_command = 'gdal_translate -co NBITS=1 -co COMPRESS=%s -ot Byte -projwin %f %f %f %f %s %s' % (compressionStrategy, xmin, ymax, xmax, ymin, blankfile_name, outputfile_name)
-            #gdal_command = 'gdal_translate -co NBITS=1 -co COMPRESS=%s -ot Byte -projwin %f %f %f %f %s %s' % (compressionStrategy, xmin, ymax, xmax, ymin, blankfile_name, outputfile_name)
 
             #print gdal_command
-            proc = Popen(gdal_command, shell=True)
-            proc.wait()
-            if (proc.returncode != 0):
-                print proc.returncode
-            # os.system('gdalinfo ' + outputfile_name)   
 
-            gdal_command = 'gdal_rasterize -burn 1 PG:\"%s\" -sql \"SELECT %s FROM %s%s AND %s=%d \" %s' %(db_connection_string, geometryFieldName, tableName, whereClause, unique_id_field, theID, outputfile_name)
-            print gdal_command
-            proc = Popen(gdal_command, shell=True)
-            proc.wait()
-            if (proc.returncode != 0):
-                print proc.returncode
+##            os.remove(outputfile_name)
+##            proc = Popen(gdal_command, shell=True)
+##            proc.wait()
+##            if (proc.returncode != 0):
+##                print proc.returncode
+##            # os.system('gdalinfo ' + outputfile_name)   
+##
+##            if burnall: # use the 'all touched' option
+##                gdal_command = 'gdal_rasterize -at -burn 1 PG:\"%s\" -sql \"SELECT %s FROM %s%s AND %s=%d \" %s' %(db_connection_string, geometryFieldName, tableName, whereClause, unique_id_field, theID, outputfile_name)
+##            else:
+##                gdal_command = 'gdal_rasterize -burn 1 PG:\"%s\" -sql \"SELECT %s FROM %s%s AND %s=%d \" %s' %(db_connection_string, geometryFieldName, tableName, whereClause, unique_id_field, theID, outputfile_name)
+##            print gdal_command
+##            proc = Popen(gdal_command, shell=True)
+##            proc.wait()
+##            if (proc.returncode != 0):
+##                print proc.returncode
 
     # closes the connection
     conn.close()
