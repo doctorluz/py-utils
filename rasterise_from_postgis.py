@@ -1,44 +1,8 @@
 import sys, json, os
 import psycopg2
-from db_connect import db_connection_string
+from db_processing_connect import db_connection_string
 from subprocess import Popen
-
-###################################### Run-specific configuration ###############################################
-# where to write to
-output_dir = "/home/lucy_data_to_organise/python/species_raster_ccit"
-# this is the field that is meaningful to you to name the raster - it need not be unique within the table.
-unique_id_field = 'id_no'
-# clause for filtering the results (leave blank if none is needed
-# for species Red List data, only certain types of occupancy are important in defining a usable range
-# whereClause = " WHERE presence IN (1,2) AND origin IN (1,2) AND seasonal IN (1,2,3)"
-whereClause = " WHERE presence IN (1,2) AND origin IN (1,2) AND seasonal IN (1,2,3)"
-# clause for grouping the records into one map. Leave blank if you want one map per database row.
-# in this case, we choose one map for each species
-groupByClause = " GROUP BY id_no"
-# The geometry is selected in order to burn it into the binary raster. Name the geometry field for your table.
-geometryFieldName = "wkb_geometry"
-# original data table where the above geometry and other data is stored
-tableName = "public.lb_experiment_iucn_rl_species_2014_2_no_sens"
-# 10 arc seconds...
-#pixelRes = 0.00277777777777777777777777777778
-# 30 arc seconds
-pixelRes = 0.00833333333333333333333333333333
-# Corner coordinates : currently they are constrained to be integers because of some string work later on
-# used in a query to get a plain rectangle covering the whole bounds
-llx=-180
-lly=-90
-urx=180
-ury=90
-# Projection data for the output rasters
-epsg=4326
-theProj = 'EPSG:%d' % epsg
-# Compression technique (e.g., LZW). For binary maps, choose a Huffman approach
-compressionStrategy = 'CCITTRLE'
-# pixel threshold for burning all pixels - i.e., if the extent is less than this on one direction
-pixelThresh = 6
-# should we overwrite existing files?
-overwrite = True
-###############################################################################################################
+from rasterise_settings import *
 
 try:
     # create connection to database
@@ -47,12 +11,18 @@ try:
     cur = conn.cursor()
 
     # Make a list of unique values of id - at the same time, get the extent of the relevant geometries for each species
-    strSql = """
-    SELECT foo.%s, ST_XMIN(foo.extent) AS xmin, ST_YMIN(foo.extent) AS ymin, ST_XMAX(foo.extent) AS xmax, ST_YMAX(foo.extent) AS ymax FROM
-    (SELECT %s, ST_Extent(%s) as extent FROM %s%s%s) AS foo;
-    """ % (unique_id_field, unique_id_field, geometryFieldName, tableName, whereClause, groupByClause)
+    if whereClause != '':
+        strSql = """
+        SELECT foo.%s, ST_XMIN(foo.extent) AS xmin, ST_YMIN(foo.extent) AS ymin, ST_XMAX(foo.extent) AS xmax, ST_YMAX(foo.extent) AS ymax%s FROM
+        (SELECT %s, ST_Extent(%s) as extent%s FROM %s WHERE %s%s) AS foo;
+        """ % (unique_id_field, extraFields2, unique_id_field, geometryFieldName, extraFields1, tableName, whereClause, groupByClause)
+    else:
+        strSql = """
+        SELECT foo.%s, ST_XMIN(foo.extent) AS xmin, ST_YMIN(foo.extent) AS ymin, ST_XMAX(foo.extent) AS xmax, ST_YMAX(foo.extent) AS ymax%s FROM
+        (SELECT %s, ST_Extent(%s) as extent%s FROM %s%s) AS foo;
+        """ % (unique_id_field, extraFields2, unique_id_field, geometryFieldName, extraFields1, tableName, groupByClause)
     
-    # print (strSql)
+    print (strSql)
 
     # execute the query
     cur.execute(strSql)
@@ -62,22 +32,37 @@ try:
 
     # Create a command for a blank raster
     blankfile_name = os.path.join(output_dir,'blank.tif')
+    if (not os.path.isfile(blankfile_name) or overwrite is True):
 
-    # create a base binary raster going to the edges of required region, 30 arc-second resolution
-    gdal_command = 'gdal_rasterize -co NBITS=1 -co COMPRESS=%s -ot Byte -burn 0 -a_srs %s -tr %s %s -te %d %d %d %d PG:\"%s\" -sql \"SELECT ST_SetSRID(ST_MakePolygon(ST_GeomFromText(\'LINESTRING(%d %d,%d %d, %d %d, %d %d, %d %d)\')), %d);\" %s' % (compressionStrategy, theProj, str(pixelRes), str(pixelRes), llx, lly, urx, ury, db_connection_string, llx,lly,llx,ury,urx,ury,urx,lly,llx,lly,epsg, blankfile_name)
-   
-##    proc = Popen(gdal_command, shell=True)
-##    proc.wait()
-##    if (proc.returncode != 0):
-##        print proc.returncode      
+        # create a base binary raster going to the edges of required region, 30 arc-second resolution
+        gdal_command = 'gdal_rasterize -co NBITS=1 -co COMPRESS=%s -ot Byte -burn 0 -a_srs %s -tr %s %s -te %d %d %d %d PG:\"%s\" -sql \"SELECT ST_SetSRID(ST_MakePolygon(ST_GeomFromText(\'LINESTRING(%d %d,%d %d, %d %d, %d %d, %d %d)\')), %d);\" %s' % (compressionStrategy, theProj, str(pixelRes), str(pixelRes), llx, lly, urx, ury, db_connection_string, llx,lly,llx,ury,urx,ury,urx,lly,llx,lly,epsg, blankfile_name)
+       
+        proc = Popen(gdal_command, shell=True)
+        proc.wait()
+        if (proc.returncode != 0):
+            print proc.returncode      
 
     ##    #xmin,ymin,xmax,ymax = float(*extent)
     ##    # was trying to cleverly unpack the list here, but it doesn't work
 
-    for theID, xmin, ymin, xmax, ymax in myList:
+    for theID, xmin, ymin, xmax, ymax, theClass, theCat in myList:
+    # for theID, xmin, ymin, xmax, ymax in myList:
 
         outputfile_name = os.path.join(output_dir, '%d.tif' % theID)
-        
+
+        #############################################################################
+        # For red list analysis, group the output files into directories according to class and Red List threat category
+        #############################################################################
+        # Need to strip slashes out of the categories "LR/cd" and "LR/lc" - (these indicate that a species hasn't been reassessed since 2000)
+        theCat = theCat.replace('/','_')
+        subdir = "%s_%s" % (theClass, theCat)
+        output_subdir = os.path.join(output_dir, subdir)
+        if (not os.path.isdir(output_subdir)):
+            os.mkdir(output_subdir)
+            print "Created directory %s" % output_subdir
+        outputfile_name = os.path.join(output_subdir, '%d.tif' % theID)
+        #############################################################################
+        print theID
         if (not os.path.isfile(outputfile_name) or overwrite is True):
             
             # check the extent of the features - if very small, make sure that all touched pixels get burned
@@ -108,23 +93,30 @@ try:
             gdal_command = 'gdal_translate -co NBITS=1 -co COMPRESS=%s -ot Byte -projwin %f %f %f %f %s %s' % (compressionStrategy, xmin, ymax, xmax, ymin, blankfile_name, outputfile_name)
 
             #print gdal_command
+            if (os.path.isfile(outputfile_name) and overwrite is True):
+                os.remove(outputfile_name)
+                
+            proc = Popen(gdal_command, shell=True)
+            proc.wait()
+            if (proc.returncode != 0):
+                print proc.returncode
+            # os.system('gdalinfo ' + outputfile_name)   
 
-##            os.remove(outputfile_name)
-##            proc = Popen(gdal_command, shell=True)
-##            proc.wait()
-##            if (proc.returncode != 0):
-##                print proc.returncode
-##            # os.system('gdalinfo ' + outputfile_name)   
-##
-##            if burnall: # use the 'all touched' option
-##                gdal_command = 'gdal_rasterize -at -burn 1 PG:\"%s\" -sql \"SELECT %s FROM %s%s AND %s=%d \" %s' %(db_connection_string, geometryFieldName, tableName, whereClause, unique_id_field, theID, outputfile_name)
-##            else:
-##                gdal_command = 'gdal_rasterize -burn 1 PG:\"%s\" -sql \"SELECT %s FROM %s%s AND %s=%d \" %s' %(db_connection_string, geometryFieldName, tableName, whereClause, unique_id_field, theID, outputfile_name)
-##            print gdal_command
-##            proc = Popen(gdal_command, shell=True)
-##            proc.wait()
-##            if (proc.returncode != 0):
-##                print proc.returncode
+            if burnall: # use the 'all touched' option
+                gdal_command = 'gdal_rasterize -at -burn 1 '
+            else:
+                gdal_command = 'gdal_rasterize -burn 1 '
+
+            if whereClause != '':
+                gdal_command += 'PG:\"%s\" -sql \"SELECT %s FROM %s WHERE %s=%d AND %s\" %s' %(db_connection_string, geometryFieldName, tableName, unique_id_field, theID, whereClause, outputfile_name)
+            else:
+                gdal_command += 'PG:\"%s\" -sql \"SELECT %s FROM %s WHERE %s=%d\" %s' %(db_connection_string, geometryFieldName, tableName, unique_id_field, theID, outputfile_name)
+
+            print gdal_command
+            proc = Popen(gdal_command, shell=True)
+            proc.wait()
+            if (proc.returncode != 0):
+                print proc.returncode
 
     # closes the connection
     conn.close()
