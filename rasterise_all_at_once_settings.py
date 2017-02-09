@@ -1,32 +1,20 @@
 ###################################### Run-specific configuration ###############################################
 # where to write to
-output_dir = "/home/lucy_data_to_organise/python/red_list_2016_rasters"
+output_filename = "/home/lucy_data_to_organise/python/wdpa_jan2017_rasters/wdpa_jan2017_relevenat_polys_flat.tif"
 # this is the field that is meaningful to you to name the raster - it need not be unique within the table.
-unique_id_field = 'id_no'
-# unique_id_field = 'wdpa_pid'
+unique_id_field = 'wdpaid'
 
-# clause for filtering the results (leave blank if none is needed
+# clause for filtering the results (leave blank if none is needed)
 # for species Red List data, only certain types of occupancy are important in defining a usable range
 # whereClause = " presence IN (1,2) AND origin IN (1,2) AND seasonal IN (1,2,3) AND class IS NOT NULL AND class != ''"
-whereClause = " presence IN (1,2) AND origin IN (1,2) AND seasonal IN (1,2,3) AND class = 'AVES'"
-# whereClause = ""
+whereClause = ""
 
-# for species Red List data, also need class and category for grouping the output usefully
-# leave this blank if you don't need any extra fields
-# extraFields1 = ",MIN(class) AS class, MIN(rlcategory) AS rlcategory"
-# extraFields2 = ",foo.class, foo.rlcategory"
-extraFields1 = ",MIN(class) AS class, MIN(category) AS category"
-extraFields2 = ",foo.class, foo.category"
-
-# clause for grouping the records into one map. Leave blank if you want one map per database row.
-# in this case, we choose one map for each species - wdpa are already individual on parcel
-groupByClause = " GROUP BY id_no"
-# groupByClause = " GROUP BY wdpa_pid"
 # The geometry is selected in order to burn it into the binary raster. Name the geometry field for your table.
 # geometryFieldName = "geom"
-geometryFieldName = "wkb_geometry"
+geometryFieldName = "the_geom"
+
 # original data table where the above geometry and other data is stored
-tableName = "public.lb_experiment_iucn_rl_species_2014_2_no_sens"
+tableName = "wdpa_pub1701.final_wdpa_level_relevant_jan2017"
 # tableName = "pp2016.mv_final_wdpa_relevant_jun2016"
 # tableName = "red_list_2016.v_amr"
 # 10 arc seconds...

@@ -1,6 +1,6 @@
 import sys, json, os
 import psycopg2
-from db_processing_connect import db_connection_string
+from db_connect import db_connection_string
 from subprocess import Popen
 from rasterise_settings import *
 
